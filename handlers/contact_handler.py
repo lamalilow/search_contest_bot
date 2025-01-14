@@ -24,7 +24,7 @@ async def contact_handler(message: types.Message):
     # Обновляем данные пользователя в базе данных
     users_col.update_one(
         {"telegram_id": message.from_user.id},
-        {"$set": {"phone_hash": hashed_phone, "role": "teacher", "notifications_enabled": True}},
+        {"$set": {"phone": hashed_phone, "role": "teacher", "notifications_enabled": True}},
         upsert=True
     )
 

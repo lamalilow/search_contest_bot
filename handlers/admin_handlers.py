@@ -40,9 +40,11 @@ async def show_users_list(message: types.Message):
 
 
 # Хэндлер для просмотра информации о пользователе
-@router.callback_query(lambda query: query.data.startswith("user_"))
+@router.callback_query(lambda query: query.data.startswith("userinfo_"))
 async def view_user_info_handler(query: types.CallbackQuery):
+    logger.info(query.data)
     parts = query.data.split("_")
+    logger.info(parts)
     if len(parts) < 3:
         await query.answer("Некорректные данные.")
         return
@@ -50,6 +52,7 @@ async def view_user_info_handler(query: types.CallbackQuery):
     _, user_id, role = parts[0], parts[1], "_".join(parts[2:])  # Объединяем оставшиеся части для роли
 
     # Если роль "view_user_info", отображаем полную информацию о пользователе
+    logger.info(role)
     if role == "view_user_info":
         user = users_col.find_one({"telegram_id": int(user_id)})
         if not user:
@@ -152,16 +155,23 @@ async def process_letter_selection(query: types.CallbackQuery):
     # Создание инлайн-клавиатуры с пользователями
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     for user in users:
+        if role == "view_user_info":
+            # Для просмотра информации о пользователе
+            callback_data = f"userinfo_{user['telegram_id']}_view_user_info"
+        else:
+            # Для изменения роли пользователя
+            callback_data = f"usereditrole_{user['telegram_id']}_{role}"
+
         keyboard.inline_keyboard.append(
-            [InlineKeyboardButton(text=user["full_name"], callback_data=f"user_{user['telegram_id']}_{role}")]
+            [InlineKeyboardButton(text=user["full_name"], callback_data=callback_data)]
         )
 
     await query.message.edit_text(f"Пользователи, фамилии которых начинаются на {letter}:", reply_markup=keyboard)
 
-
 # Хэндлер для обработки выбора пользователя
-@router.callback_query(lambda query: query.data.startswith("user_"))
+@router.callback_query(lambda query: query.data.startswith("usereditrole_"))
 async def process_user_selection(query: types.CallbackQuery):
+    logger.info(f"Callback data: {query.data}")
     _, user_id, role = query.data.split("_")
     user_id = int(user_id)
 
@@ -356,7 +366,7 @@ async def notify_all_users(contest_name, bot):
 
     for user in users:
         try:
-            await bot.send_message(user["telegram_id"], f"Новый конкурс: {contest_name}.")
+            await bot.send_message(user["telegram_id"], f"Уведомление: новый конкурс {contest_name}.")
         except Exception as e:
             logger.error(f"Не удалось уведомить пользователя {user['telegram_id']}: {e}")
 

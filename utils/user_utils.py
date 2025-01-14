@@ -1,5 +1,7 @@
 from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+from config import logger
 from services.database import users_col
 
 
@@ -22,6 +24,7 @@ async def show_user_list(message: types.Message, role: str):
     row = []
     for letter in letters:
         row.append(InlineKeyboardButton(text=letter, callback_data=f"letter_{letter}_{role}"))
+        logger.info(f'letter_{letter}_{role}')
         if len(row) == 5:
             keyboard.inline_keyboard.append(row)
             row = []

@@ -9,6 +9,7 @@ router = Router()
 # Переменная для отслеживания состояния изменения имени
 editing_name = {}
 
+
 # Хэндлер для настроек
 @router.message(lambda message: message.text == "Настройки")
 async def settings_handler(message: types.Message):
@@ -35,6 +36,7 @@ async def settings_handler(message: types.Message):
 
     await message.answer("Настройки:", reply_markup=keyboard)
 
+
 # Хэндлер для обработки нажатия на "Редактировать имя"
 @router.callback_query(lambda query: query.data == "edit_name")
 async def edit_name_handler(query: types.CallbackQuery):
@@ -46,6 +48,7 @@ async def edit_name_handler(query: types.CallbackQuery):
 
     # Закрываем callback_query
     await query.answer()
+
 
 # Хэндлер для обработки ввода нового имени
 @router.message(lambda message: editing_name.get(message.from_user.id, False))
@@ -66,7 +69,9 @@ async def process_new_name(message: types.Message):
         {"$set": {"full_name": new_name}}
     )
 
-    await message.answer(f"Имя успешно изменено на: {new_name}.", reply_markup=await send_role_keyboard(message.bot, message.from_user.id, user.get("role")))
+    await message.answer(f"Имя успешно изменено на: {new_name}.",
+                         reply_markup=await send_role_keyboard(message.bot, message.from_user.id, user.get("role")))
+
 
 # Хэндлер для обработки нажатия на "Отключить уведомления"
 @router.callback_query(lambda query: query.data == "disable_notifications")
@@ -77,8 +82,10 @@ async def disable_notifications_handler(query: types.CallbackQuery):
         {"$set": {"notifications_enabled": False}}
     )
 
-    await query.message.answer("Уведомления отключены.", reply_markup=await send_role_keyboard(query.bot, query.from_user.id, ""))
+    await query.message.answer("Уведомления отключены.",
+                             )
     await query.answer()
+
 
 # Хэндлер для обработки нажатия на "Включить уведомления"
 @router.callback_query(lambda query: query.data == "enable_notifications")
@@ -89,5 +96,6 @@ async def enable_notifications_handler(query: types.CallbackQuery):
         {"$set": {"notifications_enabled": True}}
     )
 
-    await query.message.answer("Уведомления включены.", reply_markup=await send_role_keyboard(query.bot, query.from_user.id, ""))
+    await query.message.answer("Уведомления включены.",
+                               )
     await query.answer()
