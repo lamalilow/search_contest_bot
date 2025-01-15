@@ -18,13 +18,13 @@ async def contact_handler(message: types.Message):
         await message.answer("Пожалуйста, отправьте свой собственный номер телефона.")
         return
 
-    # Хешируем номер телефона
-    hashed_phone = hash_phone_number(message.contact.phone_number)
+
+    phone = message.contact.phone_number
 
     # Обновляем данные пользователя в базе данных
     users_col.update_one(
         {"telegram_id": message.from_user.id},
-        {"$set": {"phone": hashed_phone, "role": "teacher", "notifications_enabled": True}},
+        {"$set": {"phone": phone, "role": "teacher", "notifications_enabled": True}},
         upsert=True
     )
 
