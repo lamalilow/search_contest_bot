@@ -254,50 +254,50 @@ async def process_contest_name(message: types.Message):
         {"telegram_id": message.from_user.id, "step": "name"},
         {"$set": {"name": message.text, "step": "dates"}}
     )
-    await message.answer("Введите даты проведения конкурса (в формате ДД.ММ.ГГГГ - ДД.ММ.ГГГГ):",
+    await message.answer("Введите даты проведения конкурса (в формате ДД.ММ.ГГГГ - ДД.ММ.ГГГГ или ДД.ММ.ГГГГ):",
                          reply_markup=create_cancel_keyboard())
 
 
 # Хэндлер для обработки даты конкурса
 @router.message(lambda message: contests_col.find_one({"telegram_id": message.from_user.id, "step": "dates"}))
 async def process_contest_dates(message: types.Message):
-    # Проверяем, что сообщение содержит текст
     if not message.text:
         await message.answer("Пожалуйста, введите даты в текстовом формате.")
         return
 
     try:
-        # Проверяем, что введены две даты, разделенные " - "
-        if " - " not in message.text:
-            await message.answer("Некорректный формат дат. Пожалуйста, введите даты в формате ДД.ММ.ГГГГ - ДД.ММ.ГГГГ.")
-            return
-
-        # Разделяем строку на две даты
+        # Разделяем строку на две части
         dates = message.text.split(" - ")
-        if len(dates) != 2:
-            await message.answer("Некорректный формат дат. Пожалуйста, введите две даты, разделенные ' - '.")
-            return
 
-        start_date_str, end_date_str = dates
+        if len(dates) == 1:
+            # Только дата окончания
+            end_date = datetime.strptime(dates[0].strip(), "%d.%m.%Y")
+            start_date = None
+        elif len(dates) == 2:
+            # Дата начала и дата окончания
+            start_date = datetime.strptime(dates[0].strip(), "%d.%m.%Y")
+            end_date = datetime.strptime(dates[1].strip(), "%d.%m.%Y")
 
-        # Преобразуем строки в объекты datetime
-        start_date = datetime.strptime(start_date_str.strip(), "%d.%m.%Y")
-        end_date = datetime.strptime(end_date_str.strip(), "%d.%m.%Y")
-
-        # Проверяем, что дата начала не позже даты окончания
-        if start_date > end_date:
-            await message.answer("Дата начала не может быть позже даты окончания. Попробуйте снова.")
+            if start_date > end_date:
+                await message.answer("Дата начала не может быть позже даты окончания. Попробуйте снова.")
+                return
+        else:
+            await message.answer("Некорректный формат дат. Введите 'ДД.ММ.ГГГГ' или 'ДД.ММ.ГГГГ - ДД.ММ.ГГГГ'.")
             return
 
         # Обновляем конкурс, добавляя даты
         contests_col.update_one(
             {"telegram_id": message.from_user.id, "step": "dates"},
-            {"$set": {"start_date": start_date, "end_date": end_date, "step": "description"}}
+            {"$set": {
+                "start_date": start_date,
+                "end_date": end_date,
+                "step": "description"
+            }}
         )
         await message.answer("Введите описание конкурса:", reply_markup=create_cancel_keyboard())
-    except ValueError as e:
-        logger.error(f"Ошибка при обработке даты: {e}")
-        await message.answer("Некорректный формат дат. Пожалуйста, введите даты в формате ДД.ММ.ГГГГ - ДД.ММ.ГГГГ.")
+
+    except ValueError:
+        await message.answer("Некорректный формат дат. Введите 'ДД.ММ.ГГГГ' или 'ДД.ММ.ГГГГ - ДД.ММ.ГГГГ'.")
 
 
 # Хэндлер для обработки описания конкурса

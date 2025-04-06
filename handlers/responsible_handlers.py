@@ -36,6 +36,12 @@ async def process_responsible_selection(query: types.CallbackQuery):
         await query.answer("Конкурс не найден.")
         return
 
+    # Формируем сообщение с информацией о конкурсе
+    start_date_str = (
+        contest["start_date"].strftime("%d.%m.%Y")
+        if "start_date" in contest and contest["start_date"]
+        else "Не указана"
+    )
     # Обновляем конкурс, добавляя ID ответственного
     contests_col.update_one(
         {"_id": contest["_id"]},
@@ -55,7 +61,7 @@ async def process_responsible_selection(query: types.CallbackQuery):
             responsible_id,
             f"Вас назначили ответственным за конкурс:\n"
             f"Название: {contest['name']}\n"
-            f"Даты проведения: {contest['start_date'].strftime('%d.%m.%Y')} - {contest['end_date'].strftime('%d.%m.%Y')}\n"
+            f"Даты проведения: {start_date_str} - {contest['end_date'].strftime('%d.%m.%Y')}\n"
             f"Описание: {contest.get('description', 'Описание отсутствует')}"
         )
     except Exception as e:
@@ -86,7 +92,13 @@ async def show_contests_with_participants(message: types.Message):
     # Создание инлайн-клавиатуры с конкурсами
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     for contest in contests:
-        button_text = f"{contest['name']} ({contest['start_date'].strftime('%d.%m.%Y')} - {contest['end_date'].strftime('%d.%m.%Y')})"
+        # Формируем сообщение с информацией о конкурсе
+        start_date_str = (
+            contest["start_date"].strftime("%d.%m.%Y")
+            if "start_date" in contest and contest["start_date"]
+            else "Не указана"
+        )
+        button_text = f"{contest['name']} ({start_date_str} - {contest['end_date'].strftime('%d.%m.%Y')})"
         keyboard.inline_keyboard.append(
             [InlineKeyboardButton(text=button_text, callback_data=f"participants_{contest['_id']}")])
 

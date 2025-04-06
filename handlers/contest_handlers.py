@@ -24,8 +24,13 @@ async def show_contests_list(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     for contest in contests:
         # Проверяем наличие обязательных полей
-        if "name" in contest and "start_date" in contest and "end_date" in contest:
-            button_text = f"{contest['name']} ({contest['start_date'].strftime('%d.%m.%Y')} - {contest['end_date'].strftime('%d.%m.%Y')})"
+        if "name" in contest and "end_date" in contest:
+            start_date_str = (
+                contest["start_date"].strftime("%d.%m.%Y")
+                if "start_date" in contest and contest["start_date"]
+                else "Не указана"
+            )
+            button_text = f"{contest['name']} ({start_date_str} - {contest['end_date'].strftime('%d.%m.%Y')})"
             keyboard.inline_keyboard.append(
                 [InlineKeyboardButton(text=button_text, callback_data=f"contest_{contest['_id']}")]
             )
@@ -48,20 +53,20 @@ async def process_contest_selection(query: types.CallbackQuery):
             await query.answer("Конкурс не найден.")
             return
 
-        # Проверяем наличие обязательных полей
-        if "name" not in contest or "start_date" not in contest or "end_date" not in contest:
-            await query.answer("Конкурс содержит неполные данные.")
-            return
-
         # Получаем имя ответственного
         responsible = users_col.find_one({"telegram_id": contest.get("responsible_id")})
         responsible_name = responsible["full_name"] if responsible else "Неизвестно"
 
         # Формируем сообщение с информацией о конкурсе
+        start_date_str = (
+            contest["start_date"].strftime("%d.%m.%Y")
+            if "start_date" in contest and contest["start_date"]
+            else "Не указана"
+        )
         contest_info = (
             f"Название: {contest['name']}\n"
             f"Описание: {contest.get('description', 'Описание отсутствует')}\n"
-            f"Даты проведения: {contest['start_date'].strftime('%d.%m.%Y')} - {contest['end_date'].strftime('%d.%m.%Y')}\n"
+            f"Даты проведения: {start_date_str} - {contest['end_date'].strftime('%d.%m.%Y')}\n"
             f"Ответственный: {responsible_name}\n"
             f"Файлы: {', '.join(contest.get('files', [])) if contest.get('files') else 'Файлы не прикреплены'}"
         )
@@ -98,7 +103,6 @@ async def process_contest_selection(query: types.CallbackQuery):
         logger.error(f"Ошибка при обработке конкурса: {e}")
         await query.answer("Произошла ошибка при обработке конкурса.")
 
-
 # Хэндлер для обработки нажатия на кнопку "Участвовать"
 @router.callback_query(lambda query: query.data.startswith("join_"))
 async def process_join_contest(query: types.CallbackQuery):
@@ -117,6 +121,13 @@ async def process_join_contest(query: types.CallbackQuery):
         if not user:
             await query.answer("Пользователь не найден.")
             return
+
+        # Формируем сообщение с информацией о конкурсе
+        start_date_str = (
+            contest["start_date"].strftime("%d.%m.%Y")
+            if "start_date" in contest and contest["start_date"]
+            else "Не указана"
+        )
 
         # Добавляем пользователя в список участников конкурса
         contests_col.update_one(
@@ -137,7 +148,7 @@ async def process_join_contest(query: types.CallbackQuery):
                     responsible_id,
                     f"Новый участник конкурса:\n"
                     f"Название конкурса: {contest['name']}\n"
-                    f"Даты проведения: {contest['start_date'].strftime('%d.%m.%Y')} - {contest['end_date'].strftime('%d.%m.%Y')}\n"
+                    f"Даты проведения: {start_date_str} - {contest['end_date'].strftime('%d.%m.%Y')}\n"
                     f"Участник: {user['full_name']}"
                 )
                 await query.message.answer("Ответственному отправлено уведомление.")
