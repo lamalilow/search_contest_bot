@@ -76,7 +76,7 @@ async def process_responsible_selection(query: types.CallbackQuery):
     contest = contests_col.find_one({"_id": contest["_id"]})
     logger.warning('Уведомление пользователей: '+ str(contest))
     if contest and contest.get("name"):
-        from handlers.admin_handlers import notify_all_users
+        from handlers.admin_utils import notify_all_users
         await notify_all_users(contest["name"], query.bot)
 
 

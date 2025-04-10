@@ -5,11 +5,15 @@ import os
 from dotenv import load_dotenv
 
 from middlewares.role_middleware import RoleMiddleware
-from handlers import start_handler, contact_handler, name_handler, admin_handlers, responsible_handlers, \
+from handlers import start_handler, contact_handler, name_handler, admin_user_handlers, admin_contest_handlers, responsible_handlers, \
     contest_handlers, user_handlers
 from services.scheduler import start_scheduler  # Импортируем планировщик
 
-admin_router = admin_handlers.router
+# Создаем общий роутер для админских обработчиков
+from aiogram import Router
+admin_router = Router()
+admin_router.include_router(admin_user_handlers.router)
+admin_router.include_router(admin_contest_handlers.router)
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -40,7 +44,7 @@ dp.include_router(start_handler.router)
 dp.include_router(contact_handler.router)
 dp.include_router(user_handlers.router)
 dp.include_router(name_handler.router)
-dp.include_router(admin_handlers.router)
+dp.include_router(admin_router)  # Используем новый admin_router
 dp.include_router(responsible_handlers.router)
 dp.include_router(contest_handlers.router)
 
