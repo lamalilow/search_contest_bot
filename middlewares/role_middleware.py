@@ -1,6 +1,6 @@
 from aiogram import BaseMiddleware
 from aiogram.types import Message
-from services.database import users_col
+from services.database import db
 
 
 class RoleMiddleware(BaseMiddleware):
@@ -10,7 +10,7 @@ class RoleMiddleware(BaseMiddleware):
 
     async def __call__(self, handler, event: Message, data: dict):
         # Находим пользователя в базе данных
-        user = users_col.find_one({"telegram_id": event.from_user.id})
+        user = db.users.find_one({"telegram_id": event.from_user.id})
 
         if not user:
             await event.answer("Вы не зарегистрированы в системе.")

@@ -1,8 +1,11 @@
 from aiogram import Router, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
 
-from services.database import users_col
+from services.database import db
 from utils.role_utils import send_role_keyboard
+from utils.self_assessment_states import SelfAssessmentStates
+from keyboards.self_assessment_keyboard import get_event_type_keyboard
 
 router = Router()
 
@@ -14,7 +17,7 @@ editing_name = {}
 @router.message(lambda message: message.text == "Настройки")
 async def settings_handler(message: types.Message):
     # Получаем данные пользователя из базы данных
-    user = users_col.find_one({"telegram_id": message.from_user.id})
+    user = db.users.find_one({"telegram_id": message.from_user.id})
     if not user:
         await message.answer("Пользователь не найден.")
         return
@@ -57,27 +60,30 @@ async def process_new_name(message: types.Message):
     editing_name[message.from_user.id] = False
 
     # Проверяем, что пользователь существует
-    user = users_col.find_one({"telegram_id": message.from_user.id})
+    user = db.users.find_one({"telegram_id": message.from_user.id})
     if not user:
         await message.answer("Пользователь не найден.")
         return
 
     # Обновляем имя пользователя в базе данных
     new_name = message.text.strip()  # Убираем лишние пробелы
-    users_col.update_one(
+    db.users.update_one(
         {"telegram_id": message.from_user.id},
         {"$set": {"full_name": new_name}}
     )
 
+    # Получаем роль пользователя
+    user_role = user.get("role")
+    
     await message.answer(f"Имя успешно изменено на: {new_name}.",
-                         reply_markup=await send_role_keyboard(message.bot, message.from_user.id, user.get("role")))
+                         reply_markup=await send_role_keyboard(message.bot, message.from_user.id, user_role))
 
 
 # Хэндлер для обработки нажатия на "Отключить уведомления"
 @router.callback_query(lambda query: query.data == "disable_notifications")
 async def disable_notifications_handler(query: types.CallbackQuery):
     # Обновляем статус уведомлений в базе данных
-    users_col.update_one(
+    db.users.update_one(
         {"telegram_id": query.from_user.id},
         {"$set": {"notifications_enabled": False}}
     )
@@ -91,7 +97,7 @@ async def disable_notifications_handler(query: types.CallbackQuery):
 @router.callback_query(lambda query: query.data == "enable_notifications")
 async def enable_notifications_handler(query: types.CallbackQuery):
     # Обновляем статус уведомлений в базе данных
-    users_col.update_one(
+    db.users.update_one(
         {"telegram_id": query.from_user.id},
         {"$set": {"notifications_enabled": True}}
     )
@@ -99,3 +105,14 @@ async def enable_notifications_handler(query: types.CallbackQuery):
     await query.message.answer("Уведомления включены.",
                                )
     await query.answer()
+
+
+# Хэндлер для кнопки "Заполнить лист самообследования"
+@router.message(lambda message: message.text == "Заполнить лист самообследования")
+async def self_assessment_handler(message: types.Message, state: FSMContext):
+    """Обработчик кнопки "Заполнить лист самообследования" """
+    await state.set_state(SelfAssessmentStates.selecting_event_type)
+    await message.answer(
+        "Выберите тип мероприятия:",
+        reply_markup=get_event_type_keyboard()
+    )

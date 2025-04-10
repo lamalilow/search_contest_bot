@@ -1,0 +1,150 @@
+from aiogram import Router, F
+from aiogram.types import Message, CallbackQuery
+from aiogram.filters import Command
+from datetime import datetime
+import io
+import pandas as pd
+from aiogram.types import BufferedInputFile
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+import calendar
+from bson import ObjectId
+
+from utils.self_assessment_utils import generate_monthly_report
+from services.database import db
+
+router = Router()
+
+# Словарь с названиями месяцев на русском языке
+RUSSIAN_MONTHS = {
+    1: "Январь",
+    2: "Февраль",
+    3: "Март",
+    4: "Апрель",
+    5: "Май",
+    6: "Июнь",
+    7: "Июль",
+    8: "Август",
+    9: "Сентябрь",
+    10: "Октябрь",
+    11: "Ноябрь",
+    12: "Декабрь"
+}
+
+class ReportState(StatesGroup):
+    """Состояния для процесса получения отчета"""
+    selecting_month = State()
+
+@router.message(Command("get_report"))
+async def cmd_get_report(message: Message, state: FSMContext):
+    """Обработчик команды /get_report для получения отчета за выбранный месяц"""
+    # Проверяем, есть ли у пользователя роль watcher
+    user = db.users.find_one({"telegram_id": message.from_user.id})
+    
+    # Получаем роли пользователя
+    user_roles = user.get("role") if user else None
+    
+    # Проверяем, есть ли роль watcher
+    has_watcher_role = False
+    if isinstance(user_roles, list):
+        has_watcher_role = "watcher" in user_roles
+    elif isinstance(user_roles, str):
+        has_watcher_role = user_roles == "watcher"
+    
+    if not user or not has_watcher_role:
+        await message.answer("У вас нет прав для получения отчетов.")
+        return
+    
+    # Получаем уникальные месяцы и годы из записей самообследования
+    available_months = set()
+    
+    # Получаем все записи самообследования
+    self_assessments = list(db.self_assessments.find())
+    
+    for assessment in self_assessments:
+        # Получаем дату создания записи
+        created_at = assessment.get("created_at")
+        if created_at:
+            # Преобразуем строку в объект datetime, если это строка
+            if isinstance(created_at, str):
+                try:
+                    created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                except ValueError:
+                    continue
+            
+            # Добавляем месяц и год в множество
+            available_months.add((created_at.year, created_at.month))
+    
+    if not available_months:
+        await message.answer("В базе данных нет записей самообследования для генерации отчета.")
+        return
+    
+    # Сортируем месяцы по убыванию (от новых к старым)
+    available_months = sorted(available_months, reverse=True)
+    
+    # Создаем клавиатуру с доступными месяцами
+    keyboard = []
+    row = []
+    
+    for year, month in available_months:
+        # Получаем название месяца на русском языке
+        month_name = RUSSIAN_MONTHS.get(month, f"Месяц {month}")
+        
+        # Добавляем кнопку с месяцем и годом
+        row.append({
+            "text": f"{month_name} {year}",
+            "callback_data": f"report_{year}_{month}"
+        })
+        
+        # После каждых 2 кнопок или в конце списка, добавляем строку в клавиатуру
+        if len(row) == 2 or (year, month) == available_months[-1]:
+            keyboard.append(row)
+            row = []
+    
+    # Добавляем кнопку отмены
+    keyboard.append([{"text": "Отмена", "callback_data": "cancel_report"}])
+    
+    await state.set_state(ReportState.selecting_month)
+    await message.answer(
+        "Выберите месяц, за который нужно получить отчет:",
+        reply_markup={"inline_keyboard": keyboard}
+    )
+
+@router.callback_query(ReportState.selecting_month, F.data.startswith("report_"))
+async def process_month_selection(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора месяца для отчета"""
+    # Получаем год и месяц из callback_data
+    _, year, month = callback.data.split("_")
+    year = int(year)
+    month = int(month)
+    
+    # Генерируем отчет за выбранный месяц
+    df = await generate_monthly_report(month, year)
+    
+    # Создаем Excel файл в памяти
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, sheet_name='Отчет', index=False)
+    
+    # Отправляем файл
+    output.seek(0)
+    document = BufferedInputFile(
+        output.getvalue(),
+        filename=f"report_{year}_{month}.xlsx"
+    )
+    
+    # Получаем название месяца на русском языке
+    month_name = RUSSIAN_MONTHS.get(month, f"Месяц {month}")
+    await callback.message.answer(f"Отчет за {month_name} {year} года:")
+    await callback.message.answer_document(document=document)
+    
+    # Очищаем состояние
+    await state.clear()
+    await callback.answer()
+
+@router.callback_query(ReportState.selecting_month, F.data == "cancel_report")
+async def process_cancel_report(callback: CallbackQuery, state: FSMContext):
+    """Обработка отмены получения отчета"""
+    await callback.message.answer("Получение отчета отменено.")
+    await state.clear()
+    await callback.answer() 
