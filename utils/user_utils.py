@@ -30,5 +30,8 @@ async def show_user_list(message: types.Message, role: str):
             row = []
     if row:
         keyboard.inline_keyboard.append(row)
+    
+    # Добавляем кнопку "Показать всех" внизу клавиатуры
+    keyboard.inline_keyboard.append([InlineKeyboardButton(text="Показать всех", callback_data=f"show_all_users_{role}")])
 
-    await message.answer("Выберите первую букву фамилии преподавателя:", reply_markup=keyboard)
+    await message.answer("Выберите первую букву фамилии пользователя или нажмите 'Показать всех':", reply_markup=keyboard)

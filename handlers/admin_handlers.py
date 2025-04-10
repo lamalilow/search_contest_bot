@@ -443,3 +443,36 @@ async def delete_contest(query: types.CallbackQuery):
         await query.message.edit_text(f"Конкурс '{contest['name']}' успешно удален.")
     else:
         await query.message.edit_text("Не удалось удалить конкурс.")
+
+
+# Хэндлер для обработки кнопки "Показать всех пользователей"
+@router.callback_query(lambda query: query.data.startswith("show_all_users_"))
+async def show_all_users_handler(query: types.CallbackQuery):
+    _, role = query.data.split("_", 2)[0], query.data.split("_", 2)[2]  # Получаем роль из callback_data
+    
+    users = list(users_col.find({"full_name": {"$exists": True}}).sort("full_name", 1))
+    if not users:
+        await query.answer("Пользователи не найдены.")
+        return
+    
+    # Формируем текстовый список всех пользователей
+    user_text = "Список всех пользователей:\n\n"
+    for i, user in enumerate(users, 1):
+        user_text += f"{i}. {user.get('full_name', 'Без имени')} - {user.get('role', 'Без роли')}\n"
+    
+    # Создаем кнопку "Назад"
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data=f"back_to_letters_{role}")]
+    ])
+    
+    await query.message.edit_text(user_text, reply_markup=keyboard)
+    await query.answer()
+
+# Хэндлер для обработки кнопки "Назад" к выбору букв
+@router.callback_query(lambda query: query.data.startswith("back_to_letters_"))
+async def back_to_letters_handler(query: types.CallbackQuery):
+    role = query.data.split("_")[3]  # Получаем роль из callback_data
+    
+    # Вызываем функцию показа списка пользователей с выбором букв
+    await show_user_list(query.message, role)
+    await query.answer()
