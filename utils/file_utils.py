@@ -39,7 +39,7 @@ def compress_and_save_image(source_path, target_path, max_size=(1200, 1200), qua
                 ratio = min(max_size[0] / width, max_size[1] / height)
                 new_size = (int(width * ratio), int(height * ratio))
                 img = img.resize(new_size, Image.Resampling.LANCZOS)
-                logger.info(f"Новые размеры изображения после изменения: {new_size[0]}x{new_size[1]}")
+                
             
             # Сохраняем изображение с указанным качеством
             if file_ext in ['.jpg', '.jpeg']:

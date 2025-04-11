@@ -88,6 +88,7 @@ async def set_default_commands(bot: Bot):
     # Команды для наблюдателей (watcher)
     watcher_commands = [
         BotCommand(command="start", description="Начать работу с ботом или перезапустить"),
+        BotCommand(command="watcher", description="Посмотреть доступные команды для наблюдателей"),
         BotCommand(command="self_assessment", description="Заполнить лист самообследования"),
         BotCommand(command="get_report", description="Получить отчет за период")
     ]

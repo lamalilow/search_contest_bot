@@ -208,7 +208,6 @@ async def create_excel_report(data: List[Dict], images: Dict[str, list]) -> byte
     try:
         # Записываем данные
         for row_idx, row_data in enumerate(data, 2):
-            logger.info(f"Обработка строки {row_idx-1} из {len(data)}")
             
             # Устанавливаем высоту строки
             ws.row_dimensions[row_idx].height = ROW_HEIGHT
@@ -223,11 +222,10 @@ async def create_excel_report(data: List[Dict], images: Dict[str, list]) -> byte
             confirmation_files = row_data.get("confirmation_files", [])
             img_col = len(headers) + 1
             
-            logger.info(f"Найдено {len(confirmation_files)} файлов для строки {row_idx-1}")
+ 
             
             for file_id in confirmation_files:
                 if file_id in images:
-                    logger.info(f"Обработка файла {file_id}")
                     for img_base64 in images[file_id]:
                         try:
                             # Декодируем base64 в бинарные данные
@@ -238,7 +236,6 @@ async def create_excel_report(data: List[Dict], images: Dict[str, list]) -> byte
                             with Image.open(img_io) as pil_img:
                                 # Получаем размеры изображения
                                 width, height = pil_img.size
-                                logger.info(f"Оригинальные размеры изображения: {width}x{height}")
                                 
                                 # Вычисляем новую высоту, сохраняя пропорции
                                 new_width = IMG_WIDTH
@@ -249,7 +246,7 @@ async def create_excel_report(data: List[Dict], images: Dict[str, list]) -> byte
                                     new_width = int((width * ROW_HEIGHT) / height)
                                     new_height = ROW_HEIGHT
                                 
-                                logger.info(f"Новые размеры изображения: {new_width}x{new_height}")
+                          
                                 
                                 # Изменяем размер изображения
                                 pil_img = pil_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
@@ -284,7 +281,6 @@ async def create_excel_report(data: List[Dict], images: Dict[str, list]) -> byte
                                 column_width = new_width * 0.14  # Примерное соотношение
                                 ws.column_dimensions[get_column_letter(img_col)].width = column_width
                                 
-                                logger.info(f"Изображение добавлено в ячейку {get_column_letter(img_col)}{row_idx}")
                                 
                                 img_col += 1
                         except Exception as e:
@@ -327,4 +323,3 @@ async def create_excel_report(data: List[Dict], images: Dict[str, list]) -> byte
         import shutil
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
-            logger.info("Временные файлы удалены") 
