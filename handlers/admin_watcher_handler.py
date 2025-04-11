@@ -4,7 +4,9 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
+from config import logger
 from services.database import db
+from keyboards.contest_keyboard import get_cancel_keyboard
 
 router = Router()
 
@@ -107,16 +109,26 @@ async def process_confirmation(callback: CallbackQuery, state: FSMContext):
         # Если роль - строка, преобразуем в массив с двумя ролями
         user_roles = [user_roles, "watcher"]
     
-    # Обновляем роли пользователя в базе данных
+    # Обновляем данные пользователя в базе
     db.users.update_one(
         {"telegram_id": user_id},
         {"$set": {"role": user_roles}}
     )
-    
-    await callback.message.answer(f"Роль watcher успешно добавлена пользователю {user.get('full_name', 'Без имени')}.")
-    await state.clear()
-    
+
+    # Отправляем сообщение пользователю о присвоении роли наблюдателя
+    await callback.bot.send_message(
+        user_id,
+        "Вам была присвоена роль наблюдателя (watcher). "
+        "Теперь вы можете получать отчеты по листам самообследования."
+    )
+
+    await callback.message.edit_text(
+        f"Пользователю {user.get('full_name', 'Без имени')} (ID: {user_id}) успешно присвоена роль наблюдателя."
+    )
     await callback.answer()
+
+    # Вызываем обновление команд через бот
+    # Обновление команд будет вызвано из main.py
 
 @router.callback_query(WatcherState.confirming, F.data == "cancel_watcher")
 async def process_cancellation(callback: CallbackQuery, state: FSMContext):

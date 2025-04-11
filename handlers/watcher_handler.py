@@ -3,15 +3,18 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from datetime import datetime
 import io
-import pandas as pd
 from aiogram.types import BufferedInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import calendar
 from bson import ObjectId
+import logging
 
-from utils.self_assessment_utils import generate_monthly_report
+from utils.self_assessment_utils import generate_monthly_report, create_excel_report
 from services.database import db
+
+# Настраиваем логгер
+logger = logging.getLogger(__name__)
 
 router = Router()
 
@@ -110,7 +113,7 @@ async def cmd_get_report(message: Message, state: FSMContext):
         reply_markup={"inline_keyboard": keyboard}
     )
 
-@router.callback_query(ReportState.selecting_month, F.data.startswith("report_"))
+@router.callback_query(F.data.startswith("report_"))
 async def process_month_selection(callback: CallbackQuery, state: FSMContext):
     """Обработка выбора месяца для отчета"""
     # Получаем год и месяц из callback_data
@@ -118,33 +121,31 @@ async def process_month_selection(callback: CallbackQuery, state: FSMContext):
     year = int(year)
     month = int(month)
     
-    # Генерируем отчет за выбранный месяц
-    df = await generate_monthly_report(month, year)
+    # Получаем данные и изображения
+    data, images = await generate_monthly_report(month, year)
     
-    # Создаем Excel файл в памяти
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, sheet_name='Отчет', index=False)
+    if not data:
+        await callback.message.answer("За выбранный период нет данных для отчета.")
+        await callback.answer()
+        return
+    
+    # Создаем Excel файл
+    excel_data = await create_excel_report(data, images)
     
     # Отправляем файл
-    output.seek(0)
-    document = BufferedInputFile(
-        output.getvalue(),
-        filename=f"report_{year}_{month}.xlsx"
+    await callback.message.answer_document(
+        document=BufferedInputFile(
+            excel_data,
+            filename=f"report_{year}_{month:02d}.xlsx"
+        ),
+        caption=f"Отчет за {RUSSIAN_MONTHS[month]} {year}"
     )
     
-    # Получаем название месяца на русском языке
-    month_name = RUSSIAN_MONTHS.get(month, f"Месяц {month}")
-    await callback.message.answer(f"Отчет за {month_name} {year} года:")
-    await callback.message.answer_document(document=document)
-    
-    # Очищаем состояние
-    await state.clear()
     await callback.answer()
 
 @router.callback_query(ReportState.selecting_month, F.data == "cancel_report")
-async def process_cancel_report(callback: CallbackQuery, state: FSMContext):
-    """Обработка отмены получения отчета"""
-    await callback.message.answer("Получение отчета отменено.")
+async def cancel_report(callback: CallbackQuery, state: FSMContext):
+    """Отмена выбора месяца для отчета"""
     await state.clear()
+    await callback.message.edit_text("Генерация отчета отменена")
     await callback.answer() 

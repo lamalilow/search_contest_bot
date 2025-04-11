@@ -42,7 +42,7 @@ async def show_contests_list(message: types.Message):
 
 # Хэндлер для обработки выбора конкурса
 @router.callback_query(lambda query: query.data.startswith("contest_"))
-async def process_contest_selection(query: types.CallbackQuery):
+async def view_contest_details(query: types.CallbackQuery):
     contest_id = query.data.split("_")[1]
     user_id = query.from_user.id
 

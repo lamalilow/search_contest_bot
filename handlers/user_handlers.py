@@ -1,11 +1,12 @@
 from aiogram import Router, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
+from aiogram.filters import Command
 
 from services.database import db
 from utils.role_utils import send_role_keyboard
 from utils.self_assessment_states import SelfAssessmentStates
-from keyboards.self_assessment_keyboard import get_event_type_keyboard
+from keyboards.event_type_keyboard import get_event_type_keyboard_with_pagination
 
 router = Router()
 
@@ -114,5 +115,5 @@ async def self_assessment_handler(message: types.Message, state: FSMContext):
     await state.set_state(SelfAssessmentStates.selecting_event_type)
     await message.answer(
         "Выберите тип мероприятия:",
-        reply_markup=get_event_type_keyboard()
+        reply_markup=await get_event_type_keyboard_with_pagination()
     )
