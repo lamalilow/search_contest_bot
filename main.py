@@ -7,18 +7,23 @@ from dotenv import load_dotenv
 
 from config import logger
 from middlewares.role_middleware import RoleMiddleware
-from handlers import start_handler, contact_handler, name_handler, admin_user_handlers, admin_contest_handlers, responsible_handlers, \
-    contest_handlers, user_handlers, self_assessment_handler, watcher_handler
+from handlers.user import start_handler, contact_handler, name_handler
+from handlers.admin import admin_user_handlers, admin_contest_handlers
+from handlers.contest import responsible_handlers
+from handlers.watcher import watcher_handler
+from handlers.admin import admin_handlers
+from handlers.user import user_handlers
+from handlers.contest import contest_handlers
+from handlers.contest import self_assessment_handler
+from handlers.admin import admin_activity_types_handler
+from handlers.admin.admin_activity_types_handler import router as admin_activity_types_router
 from services.scheduler import start_scheduler  # Импортируем планировщик
-from handlers.admin_watcher_handler import router as admin_watcher_router  # Импортируем новый роутер
-from handlers.admin_activity_types_handler import router as admin_activity_types_router  # Импортируем роутер для управления видами деятельности
 
 # Создаем общий роутер для админских обработчиков
 from aiogram import Router
 admin_router = Router()
 admin_router.include_router(admin_user_handlers.router)
 admin_router.include_router(admin_contest_handlers.router)
-admin_router.include_router(admin_watcher_router)  # Добавляем новый роутер в admin_router
 admin_router.include_router(admin_activity_types_router)  # Добавляем роутер для управления видами деятельности
 
 load_dotenv()

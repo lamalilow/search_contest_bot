@@ -12,6 +12,7 @@ import logging
 
 from utils.self_assessment_utils import generate_monthly_report, create_excel_report
 from services.database import db
+from handlers.contest.self_assessment_handler import cmd_self_assessment
 
 # Настраиваем логгер
 logger = logging.getLogger(__name__)
@@ -271,7 +272,6 @@ async def open_self_assessment(callback: CallbackQuery, state: FSMContext):
     )
     
     # Вместо создания нового контекста, просто вызываем команду
-    from handlers.self_assessment_handler import cmd_self_assessment
     await cmd_self_assessment(callback.message, state)  # Используем существующий state
     
     # Отвечаем на callback запрос

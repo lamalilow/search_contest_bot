@@ -179,14 +179,27 @@ async def process_user_selection(query: types.CallbackQuery):
         await query.answer("Нельзя изменить роль администратора.")
         return
 
+    # Получаем текущие роли пользователя
+    current_roles = user.get("role", [])
+    if not isinstance(current_roles, list):
+        current_roles = [current_roles]
+
+    # Если новая роль уже есть в списке, ничего не делаем
+    if role in current_roles:
+        await query.answer(f"У пользователя уже есть роль '{role}'.")
+        return
+
+    # Добавляем новую роль в список
+    current_roles.append(role)
+
     # Обновление роли пользователя
-    users_col.update_one({"telegram_id": user_id}, {"$set": {"role": role}})
+    users_col.update_one({"telegram_id": user_id}, {"$set": {"role": current_roles}})
     await query.answer(f"Роль '{role}' успешно назначена пользователю.")
 
     # Уведомление пользователя о новой роли
     try:
         await query.bot.send_message(user_id, f"Вам назначена новая роль: {role}.")
-        await send_role_keyboard(query.bot, user_id, role)
+        await send_role_keyboard(query.bot, user_id, current_roles)
     except Exception as e:
         logger.error(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
 

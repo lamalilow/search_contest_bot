@@ -5,6 +5,7 @@ from bson import ObjectId
 from services.database import users_col, contests_col
 from config import logger
 from utils.role_utils import send_role_keyboard
+from handlers.admin.admin_utils import notify_all_users
 
 # Создаем роутер
 router = Router()
@@ -76,7 +77,6 @@ async def process_responsible_selection(query: types.CallbackQuery):
     contest = contests_col.find_one({"_id": contest["_id"]})
     logger.warning('Уведомление пользователей: '+ str(contest))
     if contest and contest.get("name"):
-        from handlers.admin_utils import notify_all_users
         await notify_all_users(contest["name"], query.bot)
 
 

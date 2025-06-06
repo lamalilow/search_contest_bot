@@ -11,7 +11,7 @@ async def send_role_keyboard(bot: Bot, user_id: int, role):
         user_id: ID пользователя
         role: Роль пользователя (строка или массив ролей)
     """
-    # Если роль - массив, используем первую роль для определения клавиатуры
+    # Если роль - массив, используем приоритет ролей для определения клавиатуры
     if isinstance(role, list):
         if "admin" in role:
             keyboard = await admin_keyboard.create_admin_keyboard()
