@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from aiogram import Router, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from bson import ObjectId
+from aiogram.filters import Command
 
 from config import logger
 from services.database import users_col
@@ -170,19 +171,32 @@ async def process_letter_selection(query: types.CallbackQuery):
 @router.callback_query(lambda query: query.data.startswith("usereditrole_"))
 async def process_user_selection(query: types.CallbackQuery):
     logger.info(f"Callback data: {query.data}")
-    _, user_id, role = query.data.split("_")
-    user_id = int(user_id)
+    parts = query.data.split("_")
+    if len(parts) < 3:
+        await query.answer("Некорректные данные.")
+        return
+
+    user_id = int(parts[1])
+    role = "_".join(parts[2:])  # Объединяем оставшиеся части для роли
 
     # Проверка, является ли пользователь администратором
     user = users_col.find_one({"telegram_id": user_id})
-    if user and user.get("role") == "admin":
+    if not user:
+        await query.answer("Пользователь не найден.")
+        return
+
+    user_roles = user.get("role", [])
+    if isinstance(user_roles, str):
+        user_roles = [user_roles]
+    elif user_roles is None:
+        user_roles = []
+
+    if "admin" in user_roles:
         await query.answer("Нельзя изменить роль администратора.")
         return
 
     # Получаем текущие роли пользователя
-    current_roles = user.get("role", [])
-    if not isinstance(current_roles, list):
-        current_roles = [current_roles]
+    current_roles = user_roles
 
     # Если новая роль уже есть в списке, ничего не делаем
     if role in current_roles:
@@ -203,7 +217,20 @@ async def process_user_selection(query: types.CallbackQuery):
     except Exception as e:
         logger.error(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
 
-    await query.message.edit_text(f"Роль '{role}' назначена пользователю.")
+    # Обновляем сообщение с информацией о пользователе
+    user_info = (
+        f"👤 Имя: {user.get('full_name', 'Не указано')}\n"
+        f"🆔 Telegram ID: {user.get('telegram_id', 'Не указан')}\n"
+        f"📞 Телефон: {user.get('phone', 'Не указан')}\n"
+        f"🎭 Роли: {', '.join(current_roles)}\n"
+        f"🔔 Уведомления: {'Включены' if user.get('notifications_enabled', False) else 'Отключены'}"
+    )
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Удалить пользователя", callback_data=f"confirm_delete_user_{user_id}")]
+    ])
+
+    await query.message.edit_text(user_info, reply_markup=keyboard)
 
 
 # Хэндлер для обработки кнопки "Показать всех пользователей"
@@ -237,3 +264,131 @@ async def back_to_letters_handler(query: types.CallbackQuery):
     # Вызываем функцию показа списка пользователей с выбором букв
     await show_user_list(query.message, role)
     await query.answer() 
+
+@router.message(Command("remove_role"))
+async def cmd_remove_role(message: types.Message):
+    """Обработчик команды /remove_role для удаления роли у пользователя"""
+    # Получаем список всех пользователей
+    users = list(users_col.find())
+    
+    # Создаем клавиатуру с пользователями
+    keyboard = []
+    for user in users:
+        # Пропускаем пользователей без ролей
+        user_roles = user.get("role")
+        if not user_roles:
+            continue
+            
+        # Добавляем пользователя в клавиатуру
+        keyboard.append([{
+            "text": f"{user.get('full_name', 'Без имени')} ({user.get('telegram_id')})",
+            "callback_data": f"remove_role_{user.get('telegram_id')}"
+        }])
+    
+    if not keyboard:
+        await message.answer("Нет пользователей с ролями.")
+        return
+    
+    await message.answer(
+        "Выберите пользователя, у которого нужно удалить роль:",
+        reply_markup={"inline_keyboard": keyboard}
+    )
+
+@router.callback_query(lambda query: query.data.startswith("remove_role_"))
+async def process_remove_role_selection(query: types.CallbackQuery):
+    """Обработка выбора пользователя для удаления роли"""
+    user_id = int(query.data.split("_")[2])
+    
+    # Получаем информацию о пользователе
+    user = users_col.find_one({"telegram_id": user_id})
+    if not user:
+        await query.message.edit_text("Пользователь не найден.")
+        await query.answer()
+        return
+    
+    # Получаем текущие роли пользователя
+    user_roles = user.get("role")
+    
+    # Если у пользователя нет ролей
+    if not user_roles:
+        await query.message.edit_text("У пользователя нет ролей для удаления.")
+        await query.answer()
+        return
+    
+    # Создаем клавиатуру с ролями для удаления
+    keyboard = []
+    if isinstance(user_roles, list):
+        for role in user_roles:
+            keyboard.append([{
+                "text": f"Удалить роль: {role}",
+                "callback_data": f"confirm_remove_role_{user_id}_{role}"
+            }])
+    else:
+        keyboard.append([{
+            "text": f"Удалить роль: {user_roles}",
+            "callback_data": f"confirm_remove_role_{user_id}_{user_roles}"
+        }])
+    
+    await query.message.edit_text(
+        f"Выберите роль для удаления у пользователя {user.get('full_name', 'Без имени')}:",
+        reply_markup={"inline_keyboard": keyboard}
+    )
+    await query.answer()
+
+@router.callback_query(lambda query: query.data.startswith("confirm_remove_role_"))
+async def process_remove_role_confirmation(query: types.CallbackQuery):
+    """Обработка подтверждения удаления роли"""
+    parts = query.data.split("_")
+    user_id = int(parts[3])
+    role_to_remove = "_".join(parts[4:])  # Объединяем оставшиеся части для роли
+    
+    # Получаем информацию о пользователе
+    user = users_col.find_one({"telegram_id": user_id})
+    if not user:
+        await query.message.edit_text("Пользователь не найден.")
+        await query.answer()
+        return
+    
+    # Получаем текущие роли пользователя
+    user_roles = user.get("role")
+    
+    # Проверяем, является ли пользователь администратором
+    if role_to_remove == "admin":
+        await query.message.edit_text("❌ Невозможно удалить роль 'админ'.")
+        await query.answer()
+        return
+    
+    # Обновляем роли пользователя
+    if isinstance(user_roles, list):
+        if role_to_remove in user_roles:
+            user_roles.remove(role_to_remove)
+            # Если осталась только одна роль, преобразуем в строку
+            if len(user_roles) == 1:
+                user_roles = user_roles[0]
+            elif not user_roles:  # Если ролей не осталось
+                user_roles = None
+    else:
+        if user_roles == role_to_remove:
+            user_roles = None
+    
+    # Обновляем данные пользователя в базе
+    users_col.update_one(
+        {"telegram_id": user_id},
+        {"$set": {"role": user_roles}}
+    )
+    
+    # Отправляем сообщение пользователю об удалении роли
+    try:
+        await query.bot.send_message(
+            user_id,
+            f"У вас была удалена роль: {role_to_remove}"
+        )
+        if user_roles:
+            await send_role_keyboard(query.bot, user_id, user_roles)
+    except Exception as e:
+        logger.error(f"Не удалось отправить сообщение пользователю {user_id}: {e}")
+    
+    await query.message.edit_text(
+        f"Роль '{role_to_remove}' успешно удалена у пользователя {user.get('full_name', 'Без имени')}."
+    )
+    await query.answer()

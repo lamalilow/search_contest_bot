@@ -3,10 +3,12 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import BotCommand, BotCommandScopeChat
 
 from config import logger
-from services.database import db
+from services.database import users_col
 from keyboards.contest_keyboard import get_cancel_keyboard
+from utils.role_utils import send_role_keyboard
 
 router = Router()
 
@@ -19,7 +21,7 @@ class WatcherState(StatesGroup):
 async def cmd_add_watcher(message: Message, state: FSMContext):
     """Обработчик команды /add_watcher для добавления роли watcher"""
     # Получаем список всех пользователей
-    users = list(db.users.find())
+    users = list(users_col.find())
     
     # Создаем клавиатуру с пользователями
     keyboard = []
@@ -56,7 +58,7 @@ async def process_user_selection(callback: CallbackQuery, state: FSMContext):
     await state.update_data(selected_user_id=user_id)
     
     # Получаем информацию о пользователе
-    user = db.users.find_one({"telegram_id": user_id})
+    user = users_col.find_one({"telegram_id": user_id})
     if not user:
         await callback.message.answer("Пользователь не найден.")
         await state.clear()
@@ -91,7 +93,7 @@ async def process_confirmation(callback: CallbackQuery, state: FSMContext):
         return
     
     # Получаем информацию о пользователе
-    user = db.users.find_one({"telegram_id": user_id})
+    user = users_col.find_one({"telegram_id": user_id})
     if not user:
         await callback.message.answer("Пользователь не найден.")
         await state.clear()
@@ -110,7 +112,7 @@ async def process_confirmation(callback: CallbackQuery, state: FSMContext):
         user_roles = [user_roles, "watcher"]
     
     # Обновляем данные пользователя в базе
-    db.users.update_one(
+    users_col.update_one(
         {"telegram_id": user_id},
         {"$set": {"role": user_roles}}
     )
@@ -122,13 +124,32 @@ async def process_confirmation(callback: CallbackQuery, state: FSMContext):
         "Теперь вы можете получать отчеты по листам самообследования."
     )
 
+    # Обновляем клавиатуру пользователя
+    await send_role_keyboard(callback.bot, user_id, user_roles)
+
+    # Обновляем команды для пользователя
+    watcher_commands = [
+        BotCommand(command="start", description="Начать работу с ботом или перезапустить"),
+        BotCommand(command="watcher", description="Посмотреть доступные команды для наблюдателей"),
+        BotCommand(command="get_report", description="Получить отчет за период"),
+        BotCommand(command="contest", description="Заполнить участие в конкурсе"),
+    ]
+    
+    try:
+        await callback.bot.set_my_commands(
+            watcher_commands,
+            scope=BotCommandScopeChat(chat_id=user_id)
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при установке команд для watcher {user_id}: {e}")
+
     await callback.message.edit_text(
         f"Пользователю {user.get('full_name', 'Без имени')} (ID: {user_id}) успешно присвоена роль наблюдателя."
     )
     await callback.answer()
 
-    # Вызываем обновление команд через бот
-    # Обновление команд будет вызвано из main.py
+    # Очищаем состояние
+    await state.clear()
 
 @router.callback_query(WatcherState.confirming, F.data == "cancel_watcher")
 async def process_cancellation(callback: CallbackQuery, state: FSMContext):

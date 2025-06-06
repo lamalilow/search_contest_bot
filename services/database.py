@@ -6,3 +6,4 @@ client = MongoClient(MONGO_URI)
 db = client["contests_bot"]
 users_col = db["users"]
 contests_col = db["contests"]
+contest_participations_col = db["contest_participations"]

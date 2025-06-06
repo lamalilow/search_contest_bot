@@ -8,15 +8,13 @@ from dotenv import load_dotenv
 from config import logger
 from middlewares.role_middleware import RoleMiddleware
 from handlers.user import start_handler, contact_handler, name_handler
-from handlers.admin import admin_user_handlers, admin_contest_handlers
+from handlers.admin import admin_user_handlers, admin_contest_handlers, admin_watcher_handler
 from handlers.contest import responsible_handlers
 from handlers.watcher import watcher_handler
-from handlers.admin import admin_handlers
+
 from handlers.user import user_handlers
 from handlers.contest import contest_handlers
-from handlers.contest import self_assessment_handler
-from handlers.admin import admin_activity_types_handler
-from handlers.admin.admin_activity_types_handler import router as admin_activity_types_router
+from handlers.contest.contest_participation_handler import router as contest_participation_router
 from services.scheduler import start_scheduler  # Импортируем планировщик
 
 # Создаем общий роутер для админских обработчиков
@@ -24,7 +22,7 @@ from aiogram import Router
 admin_router = Router()
 admin_router.include_router(admin_user_handlers.router)
 admin_router.include_router(admin_contest_handlers.router)
-admin_router.include_router(admin_activity_types_router)  # Добавляем роутер для управления видами деятельности
+admin_router.include_router(admin_watcher_handler.router)  # Добавляем роутер для обработчика add_watcher
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -46,16 +44,13 @@ responsible_router.message.middleware(RoleMiddleware(allowed_roles=["responsible
 contest_router = contest_handlers.router
 contest_router.message.middleware(RoleMiddleware(allowed_roles=["teacher", "responsible", "admin"]))
 
+# Добавляем middleware для роутера участия в конкурсах
+contest_participation_router.message.middleware(RoleMiddleware(allowed_roles=["teacher", "responsible", "admin", "watcher"]))
+contest_participation_router.callback_query.middleware(RoleMiddleware(allowed_roles=["teacher", "responsible", "admin", "watcher"]))
+
 user_router = user_handlers.router
 user_router.message.middleware(RoleMiddleware(allowed_roles=["teacher", "responsible", "admin"]))
 user_router.callback_query.middleware(RoleMiddleware(allowed_roles=["teacher", "responsible", "admin"]))
-
-# Роутер для самообследования
-self_assessment_router = self_assessment_handler.router
-# Разрешаем всем пользователям, включая watcher, использовать функционал самообследования
-self_assessment_roles = ["teacher", "responsible", "admin", "watcher"]
-self_assessment_router.message.middleware(RoleMiddleware(allowed_roles=self_assessment_roles))
-self_assessment_router.callback_query.middleware(RoleMiddleware(allowed_roles=self_assessment_roles))
 
 # Роутер для watcher
 watcher_router = watcher_handler.router
@@ -69,7 +64,7 @@ dp.include_router(name_handler.router)
 dp.include_router(admin_router)  # Используем новый admin_router
 dp.include_router(responsible_handlers.router)
 dp.include_router(contest_handlers.router)
-dp.include_router(self_assessment_router)
+dp.include_router(contest_participation_router)  # Добавляем роутер участия в конкурсах
 dp.include_router(watcher_router)
 
 
@@ -87,15 +82,23 @@ async def set_default_commands(bot: Bot):
     # Команды по умолчанию для всех пользователей
     default_commands = [
         BotCommand(command="start", description="Начать работу с ботом или перезапустить"),
-        BotCommand(command="self_assessment", description="Заполнить лист самообследования")
+        BotCommand(command="contest", description="Заполнить участие в конкурсе"),
+    ]
+    
+    # Команды для администраторов
+    admin_commands = [
+        BotCommand(command="start", description="Начать работу с ботом или перезапустить"),
+        BotCommand(command="contest", description="Заполнить участие в конкурсе"),
+        BotCommand(command="add_watcher", description="Добавить роль наблюдателя"),
+        BotCommand(command="remove_role", description="Удалить роль у пользователя"),
     ]
     
     # Команды для наблюдателей (watcher)
     watcher_commands = [
         BotCommand(command="start", description="Начать работу с ботом или перезапустить"),
         BotCommand(command="watcher", description="Посмотреть доступные команды для наблюдателей"),
-        BotCommand(command="self_assessment", description="Заполнить лист самообследования"),
-        BotCommand(command="get_report", description="Получить отчет за период")
+        BotCommand(command="get_report", description="Получить отчет за период"),
+        BotCommand(command="contest", description="Заполнить участие в конкурсе"),
     ]
     
     # Установка команд по умолчанию
@@ -113,29 +116,35 @@ async def set_default_commands(bot: Bot):
     
     logger.info(f"Найдено {len(watcher_users)} пользователей с ролью watcher")
     
+    # Устанавливаем команды для каждого watcher
     for user in watcher_users:
         try:
-            user_id = user.get("telegram_id")
-            if user_id:
-                await bot.set_my_commands(
-                    watcher_commands,
-                    scope=BotCommandScopeChat(chat_id=user_id)
-                )
-                logger.info(f"Установлены специальные команды для пользователя {user_id}")
+            await bot.set_my_commands(
+                watcher_commands,
+                scope=BotCommandScopeChat(chat_id=user["telegram_id"])
+            )
         except Exception as e:
-            logger.error(f"Ошибка при установке команд для пользователя {user.get('telegram_id')}: {e}")
-
-
-# Обработчик для обновления команд после добавления роли watcher
-# Используем прямой импорт F из aiogram вместо filters.F
-
-# Регистрируем обработчик для обновления команд после изменения роли пользователя
-@dp.callback_query(F.data == "confirm_watcher")
-async def update_commands_after_role_change(callback: CallbackQuery):
-    # Вызываем после завершения работы текущего обработчика
-    await callback.answer()  # Важно не убирать этот вызов для завершения callback
-    # Затем обновляем команды
-    await set_default_commands(callback.bot)
+            logger.error(f"Ошибка при установке команд для watcher {user['telegram_id']}: {e}")
+    
+    # Находим всех администраторов и устанавливаем им специальные команды
+    admin_users = list(db.users.find({
+        "$or": [
+            {"role": "admin"},
+            {"role": {"$in": ["admin"]}}
+        ]
+    }))
+    
+    logger.info(f"Найдено {len(admin_users)} пользователей с ролью admin")
+    
+    # Устанавливаем команды для каждого администратора
+    for user in admin_users:
+        try:
+            await bot.set_my_commands(
+                admin_commands,
+                scope=BotCommandScopeChat(chat_id=user["telegram_id"])
+            )
+        except Exception as e:
+            logger.error(f"Ошибка при установке команд для admin {user['telegram_id']}: {e}")
 
 
 if __name__ == "__main__":

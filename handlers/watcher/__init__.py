@@ -1,3 +1,0 @@
-"""
-Watcher handlers package
-""" 

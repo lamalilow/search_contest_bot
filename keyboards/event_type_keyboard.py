@@ -1,5 +1,4 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from utils.self_assessment_utils import get_activity_types
 from config import logger
 
 async def get_event_type_keyboard_with_pagination(page: int = 0, items_per_page: int = 5) -> InlineKeyboardMarkup:

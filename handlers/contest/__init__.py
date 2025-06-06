@@ -1,3 +1,0 @@
-"""
-Contest handlers package
-""" 
